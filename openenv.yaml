@@ -1,0 +1,46 @@
+---
+title: LexForge — Comprehensive Legal Intelligence
+emoji: ⚖️
+colorFrom: blue
+colorTo: purple
+sdk: docker
+pinned: true
+tags:
+  - openenv
+  - legal
+  - compliance
+  - nlp
+  - rl-environment
+  - contract-review
+  - gdpr
+  - india-law
+---
+name: lex_forge
+version: '1.0.0'
+description: >
+  OpenEnv environment for training AI agents on real-world legal document
+  review across 10 domains: contracts, GDPR/DPDPA, employment, IP, corporate
+  M&A, AML, real estate, criminal evidence, immigration, and litigation.
+  Covers Indian law (BNS 2023, DPDPA 2023, Labour Codes 2020) and global
+  frameworks (GDPR, HIPAA, CCPA, SOX). Law-verified by legal consultation.
+
+tasks:
+  - id: easy
+    description: 'Identify risky vs benign clauses in a 5-clause startup NDA'
+    difficulty: easy
+    max_steps: 5
+
+  - id: medium
+    description: 'Multi-regulation compliance audit: GDPR + AML + Real Estate + Immigration across 9 clauses'
+    difficulty: medium
+    max_steps: 8
+
+  - id: hard
+    description: 'Full M&A due diligence redline across 5 legal domains with structured audit report'
+    difficulty: hard
+    max_steps: 12
+
+  - id: expert
+    description: 'Adversarial multi-jurisdiction contract with obfuscated violations and multi-party sign-off'
+    difficulty: expert
+    max_steps: 15

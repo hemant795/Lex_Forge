@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lex-forge"
+version = "1.0.0"
+description = "LexForge — Comprehensive Legal Intelligence OpenEnv Environment"
+requires-python = ">=3.10"
+dependencies = [
+    "openenv-core>=0.2.0",
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.29.0",
+    "pydantic>=2.7.1",
+    "openai>=1.30.1",
+    "httpx>=0.27.0",
+    "python-multipart>=0.0.9",
+]
+
+[project.scripts]
+server = "server.app:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["server"]

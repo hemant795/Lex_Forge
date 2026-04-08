@@ -1,0 +1,76 @@
+{
+  "model": "gemma4:e4b",
+  "endpoint": "http://localhost:11434/v1",
+  "results": [
+    {
+      "task_id": "easy",
+      "steps": 5,
+      "rewards": [
+        0.0,
+        0.5,
+        0.0,
+        0.5,
+        0.1
+      ],
+      "mean_reward": 0.22000000000000003,
+      "success": true,
+      "total_time": 19.47265100479126
+    },
+    {
+      "task_id": "medium",
+      "steps": 8,
+      "rewards": [
+        0.66,
+        1.0,
+        0.2934,
+        0.3667,
+        0.66,
+        0.72,
+        1.0,
+        1.0
+      ],
+      "mean_reward": 0.7125125,
+      "success": true,
+      "total_time": 17.633108615875244
+    },
+    {
+      "task_id": "hard",
+      "steps": 10,
+      "rewards": [
+        0.715,
+        0.78,
+        0.845,
+        0.91,
+        0.975,
+        0.975,
+        1.0,
+        1.0,
+        0.42,
+        0.975
+      ],
+      "mean_reward": 0.8595,
+      "success": false,
+      "total_time": 29.946229934692383
+    },
+    {
+      "task_id": "expert",
+      "steps": 10,
+      "rewards": [
+        0.0,
+        1.0,
+        0.715,
+        1.0,
+        0.845,
+        0.36,
+        0.845,
+        0.91,
+        1.0,
+        1.0
+      ],
+      "mean_reward": 0.7675,
+      "success": false,
+      "total_time": 28.889812469482422
+    }
+  ],
+  "overall_mean": 0.639878125
+}
