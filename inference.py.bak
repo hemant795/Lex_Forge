@@ -158,10 +158,7 @@ def call_llm(client: OpenAI, prompt: str) -> Dict[str, Any]:
             raw = raw.split("```")[1]
             if raw.startswith("json"):
                 raw = raw[4:]
-        try:
         return json.loads(raw.strip())
-    except Exception:
-        return {}
     except Exception as exc:
         print(f"[WARN] LLM error: {exc}", flush=True)
         return {}

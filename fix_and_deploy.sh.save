@@ -1,0 +1,40 @@
+#!/bin/bash
+
+set -e  # stop on error
+
+echo "🚀 Starting LexForge auto-fix + deploy..."
+
+# =========================
+# 1. ENV SETUP
+# =========================
+echo "🔧 Setting environment variables..."
+
+export HF_TOKEN=${HF_TOKEN:-"YOUR_HF_TOKEN_HERE"}
+export API_BASE_URL="https://router.huggingface.co/v1"
+export MODEL_NAME="Qwen/Qwen3-32B"
+
+if [ "$HF_TOKEN" == "YOUR_HF_TOKEN_HERE" ]; then
+  echo "❌ ERROR: Set your HF_TOKEN before running"
+  exit 1
+fi
+
+# =========================
+# 2. PATCH inference.py
+# =========================
+echo "🩹 Patching inference.py..."
+
+FILE="inference.py"
+
+# Backup
+cp $FILE ${FILE}.bak
+
+# --- Fix JSON parsing ---
+sed -i 's/return json.loads(raw.strip())/\
+    try:\n        return json.loads(raw.strip())\n    except Exception:\n        return {}\n/' $FILE
+
+# --- Protect env.reset ---
+sed -i 's/obs_raw = env.reset(task_id=task_id)/\
+    try:\n        obs_raw = env.reset(task_id=task_id)\n    except Exception as e:\n        print(f"[FATAL] reset failed: {e}", flush=True)\n        return {"task_id": task_id, "success": False}\n/' $FILE
+
+# --- Harden action_dict ---
+sed -i 's/action_dict  = call_l
