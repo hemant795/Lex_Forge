@@ -151,6 +151,9 @@ def call_llm(client: OpenAI, prompt: str) -> Dict[str, Any]:
             max_tokens=MAX_TOKENS,
         )
         raw = (resp.choices[0].message.content or "").strip()
+        # Strip Qwen3 thinking tags
+        import re as _re
+        raw = _re.sub(r"<think>.*?</think>", "", raw, flags=_re.DOTALL).strip()
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):
@@ -174,8 +177,10 @@ def fallback_action(obs: Dict[str, Any], task_id: str) -> Dict[str, Any]:
         if sev == "NONE":
             return {"action_type": "clear_clause", "clause_id": cid}
         if best == "classify_risk":
+            taxonomy = obs.get("context", {}).get("risk_taxonomy", {})
+            risk_keys = list(taxonomy.keys())[:2] if taxonomy else ["unreasonable_duration"]
             return {"action_type": "classify_risk", "clause_id": cid,
-                    "risks": ["unreasonable_duration"], "citation": "Contract Act 1872"}
+                    "risks": risk_keys, "citation": "GDPR Art.5(1)(b)"}
         if best == "rewrite_clause":
             return {"action_type": "rewrite_clause", "clause_id": cid,
                     "rewritten_text": f"This clause is amended to comply with applicable law, limiting obligations to a reasonable fixed term of 3 years with clear termination rights for both parties."}
