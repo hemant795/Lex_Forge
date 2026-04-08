@@ -36,6 +36,12 @@ LexObservation = _mod.LexObservation
 LexState       = _mod.LexState
 
 
+
+def _clip_reward(r: float) -> float:
+    """Rewards must be strictly between 0 and 1 (exclusive)."""
+    if r is None: return None
+    return max(0.001, min(0.999, float(r)))
+
 # ─── Clause window size ───────────────────────────────────────────────────────
 WINDOW = 3   # How many pending clauses are visible at once
 
@@ -259,6 +265,7 @@ class LexForgeEnvironment(Environment):
         with _STORE_LOCK:
             _STORE['state']   = self._state
             _STORE['clauses'] = self._episode_clauses
+        final_reward = _clip_reward(final_reward)
         return self._build_observation(
             reward=final_reward,
             done=done,

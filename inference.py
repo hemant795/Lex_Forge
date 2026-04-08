@@ -204,12 +204,27 @@ def fallback_action(obs: Dict[str, Any], task_id: str) -> Dict[str, Any]:
     return {"action_type": available[0]}
 
 
+OPENENV_URL = os.getenv("OPENENV_URL", "https://hemant795-lex-forge.hf.space")
+
 def setup_env():
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "server"))
     sys.path.insert(0, os.path.dirname(__file__))
-    from server.environment import LexForgeEnvironment
     from models import LexAction
-    return LexForgeEnvironment, LexAction
+    # Use HTTP client if remote URL set, else fall back to local
+    try:
+        from client import SyncLexForgeEnvClient
+        class RemoteEnv:
+            def __init__(self):
+                self._client = SyncLexForgeEnvClient(base_url=OPENENV_URL)
+            def reset(self, task_id):
+                obs = self._client.reset(task_id=task_id)
+                return obs
+            def step(self, action):
+                return self._client.step(action)
+        return RemoteEnv, LexAction
+    except Exception as e:
+        print(f"[WARN] HTTP client failed ({e}), falling back to local env", flush=True)
+        from server.environment import LexForgeEnvironment
+        return LexForgeEnvironment, LexAction
 
 
 def run_episode(env_cls, action_cls, client: OpenAI, task_id: str) -> Dict[str, Any]:
