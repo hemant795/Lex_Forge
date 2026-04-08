@@ -159,9 +159,9 @@ def call_llm(client: OpenAI, prompt: str) -> Dict[str, Any]:
             if raw.startswith("json"):
                 raw = raw[4:]
         try:
-        return json.loads(raw.strip())
-    except Exception:
-        return {}
+            return json.loads(raw.strip())
+        except Exception:
+            return {}
     except Exception as exc:
         print(f"[WARN] LLM error: {exc}", flush=True)
         return {}
@@ -214,10 +214,10 @@ def setup_env():
     from models import LexAction
     # Use HTTP client if remote URL set, else fall back to local
     try:
-        from client import SyncLexForgeEnvClient
+        raise ImportError('Force local env')
         class RemoteEnv:
             def __init__(self):
-                self._client = SyncLexForgeEnvClient(base_url=OPENENV_URL)
+                self._client = SyncLexForgeEnvClient()
             def reset(self, task_id):
                 obs = self._client.reset(task_id=task_id)
                 return obs
