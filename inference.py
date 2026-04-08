@@ -1,29 +1,42 @@
 """
 inference.py
 ============
-Baseline inference script for LexForge — OpenEnv Competition Submission.
+LexForge baseline inference — OpenEnv Competition Submission.
+
+Uses HTTP to call the running environment server (HF Space or local).
+No direct imports — works identically locally and on the validator.
 
 Mandatory env variables:
-  API_BASE_URL     LLM API endpoint (default: HuggingFace router)
-  MODEL_NAME       Model identifier (default: Qwen/Qwen3-32B)
-  HF_TOKEN         HuggingFace API key
-  LOCAL_IMAGE_NAME Docker image name (optional)
+  API_BASE_URL      LLM API endpoint          (default: HF router)
+  MODEL_NAME        Model identifier           (default: Qwen/Qwen3-32B)
+  HF_TOKEN          HuggingFace API key
+  LOCAL_IMAGE_NAME  Docker image name (optional)
 
 stdout format (exact — validated by competition):
   [START] task=<name> env=lex_forge model=<model>
   [STEP]  step=<n> action=<str> reward=<0.00> done=<true|false> error=<msg|null>
   [END]   success=<true|false> steps=<n> rewards=<r1,r2,...>
 """
+
 from __future__ import annotations
-import json, os, sys, textwrap, time
+import json
+import os
+import sys
+import textwrap
+import time
 from typing import Any, Dict, List, Optional
+
+import httpx
 from openai import OpenAI
 
-API_BASE_URL     = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-# HF evaluator uses Qwen/Qwen3-32B; override locally: MODEL_NAME=gemma4:e4b
-MODEL_NAME       = os.getenv("MODEL_NAME",   "Qwen/Qwen3-32B")
+# ── Mandatory env vars — first 2 MUST have hardcoded defaults ─────────────────
+API_BASE_URL     = os.getenv("API_BASE_URL",     "https://router.huggingface.co/v1")
+MODEL_NAME       = os.getenv("MODEL_NAME",       "Qwen/Qwen3-32B")
 HF_TOKEN         = os.getenv("HF_TOKEN")
 LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
+
+# Environment server URL — HF Space or local
+ENV_URL = os.getenv("ENV_URL", "http://localhost:7860")
 
 MAX_STEPS   = 10
 TEMPERATURE = 0.1
@@ -31,111 +44,115 @@ MAX_TOKENS  = 512
 TASKS       = ["easy", "medium", "hard", "expert"]
 ENV_NAME    = "lex_forge"
 
-# Action priority per task — higher-reward actions first
-ACTION_PRIORITY = {
-    "easy":   ["clear_clause", "flag_clause"],
-    "medium": ["classify_risk", "flag_clause", "clear_clause"],
-    "hard":   ["rewrite_clause", "classify_risk", "generate_report", "flag_clause", "clear_clause"],
-    "expert": ["detect_adversarial_clauses", "submit_multi_party_sign_off",
-               "rewrite_clause", "classify_risk", "flag_clause", "clear_clause"],
-}
-
-def get_priority(task_id: str, completed_stages: list, available: list) -> list:
-    """Remove already-completed one-shot actions from priority list."""
-    p = list(ACTION_PRIORITY.get(task_id, available))
-    if "detect_adversarial" in completed_stages and "detect_adversarial_clauses" in p:
-        p.remove("detect_adversarial_clauses")
-    if "sign_off" in completed_stages and "submit_multi_party_sign_off" in p:
-        p.remove("submit_multi_party_sign_off")
-    return p
-
-# ── Logging ───────────────────────────────────────────────────────────────────
+# ── stdout logging (exact format required by spec) ────────────────────────────
 
 def log_start(task: str, model: str) -> None:
     print(f"[START] task={task} env={ENV_NAME} model={model}", flush=True)
 
-def log_step(step: int, action: str, reward: float, done: bool,
-             error: Optional[str], elapsed: float) -> None:
+def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
     err = error if error else "null"
-    print(f"[STEP] step={step} action={action} reward={reward:.2f} "
-          f"done={str(done).lower()} error={err}", flush=True)
-    print(f"[DEBUG] step_time={elapsed:.1f}s", file=__import__("sys").stderr, flush=True)
+    print(
+        f"[STEP]  step={step} action={action} "
+        f"reward={reward:.2f} done={str(done).lower()} error={err}",
+        flush=True,
+    )
 
-def log_end(success: bool, steps: int, rewards: List[float], total_time: float) -> None:
+def log_end(success: bool, steps: int, rewards: List[float]) -> None:
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] success={str(success).lower()} steps={steps} "
-          f"rewards={rewards_str}", flush=True)
-    print(f"[DEBUG] total_time={total_time:.1f}s", file=__import__("sys").stderr, flush=True)
+    print(
+        f"[END]   success={str(success).lower()} steps={steps} rewards={rewards_str}",
+        flush=True,
+    )
 
-# ── Prompts ───────────────────────────────────────────────────────────────────
+# ── Environment HTTP client ───────────────────────────────────────────────────
+
+def env_reset(task_id: str) -> Dict[str, Any]:
+    """POST /reset — returns observation dict."""
+    try:
+        r = httpx.post(
+            f"{ENV_URL}/reset",
+            json={"task_id": task_id},
+            timeout=30.0,
+        )
+        r.raise_for_status()
+        data = r.json()
+        # openenv-core wraps: {"observation": {...}, "done": bool, "reward": ...}
+        obs = data.get("observation", data)
+        obs["done"]   = data.get("done",   obs.get("done",   False))
+        obs["reward"] = data.get("reward", obs.get("reward", None))
+        return obs
+    except Exception as e:
+        print(f"[WARN] reset failed: {e}", flush=True)
+        return {"task_id": task_id, "done": False, "reward": None,
+                "available_actions": ["flag_clause"], "context": {}, "step": 0, "max_steps": 10}
+
+def env_step(action_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """POST /step — returns observation dict with reward/done at top level."""
+    try:
+        r = httpx.post(
+            f"{ENV_URL}/step",
+            json={"action": action_dict},
+            timeout=30.0,
+        )
+        r.raise_for_status()
+        data = r.json()
+        obs = data.get("observation", data)
+        obs["done"]   = data.get("done",   obs.get("done",   True))
+        obs["reward"] = data.get("reward", obs.get("reward", 0.0))
+        return obs
+    except Exception as e:
+        print(f"[WARN] step failed: {e}", flush=True)
+        return {"done": True, "reward": 0.0, "available_actions": [],
+                "context": {}, "step": 0, "max_steps": 10}
+
+# ── System prompt ─────────────────────────────────────────────────────────────
 
 SYSTEM_PROMPT = textwrap.dedent("""
-You are a senior legal analyst agent. You review legal clauses and take actions.
-Respond with ONE valid JSON action object — no markdown, no explanation, just JSON.
+You are a senior legal analyst agent operating inside the LexForge OpenEnv environment.
+You will receive a JSON observation describing the current state of a legal document review task.
+You must respond with a single valid JSON action object — no markdown, no explanation, just JSON.
 
-ACTION SELECTION RULES (follow in order):
-1. For easy tasks: use flag_clause for risky clauses, clear_clause for benign ones.
-2. For medium tasks: use classify_risk with citation for best score.
-3. For hard tasks: use classify_risk or rewrite_clause — these score 2x more than flag_clause.
-4. For expert tasks: use detect_adversarial_clauses first, then submit_multi_party_sign_off last.
+Format:
+{"action_type": "<one of available_actions>", "<param>": <value>}
 
-CRITICAL RULES:
-- clause_id MUST be from the "valid_clause_ids" list shown in the observation.
-- NEVER reuse a clause_id you already acted on.
-- Benign clauses (severity_hint=NONE) → use clear_clause, NOT flag_clause.
-- Risky clauses (severity_hint=HIGH or CRITICAL) → flag or classify.
-- risks[] values MUST come from the risk_taxonomy keys shown.
-
-JSON FORMAT per action_type:
-  flag_clause:   {"action_type":"flag_clause","clause_id":"C001","risks":["unreasonable_duration"]}
-  clear_clause:  {"action_type":"clear_clause","clause_id":"C016"}
-  classify_risk: {"action_type":"classify_risk","clause_id":"C001","risks":["unreasonable_duration"],"citation":"Contract Act 1872 S.27"}
-  rewrite_clause:{"action_type":"rewrite_clause","clause_id":"C001","rewritten_text":"Fixed clause text..."}
-  generate_report:{"action_type":"generate_report","report":{"executive_summary":"...","flagged_clauses":["C001"],"severity_matrix":{"C001":"HIGH"},"recommendations":["Fix C001"],"deal_breakers":["C001"]}}
-  detect_adversarial_clauses:{"action_type":"detect_adversarial_clauses","clause_ids":["C019","C020"]}
-  submit_multi_party_sign_off:{"action_type":"submit_multi_party_sign_off","party_a_satisfied":true,"party_b_satisfied":true,"balance_justification":"Both parties benefit from the balanced redline addressing GDPR compliance and legitimate data retention within explicit limits."}
+Rules:
+- Choose action_type ONLY from available_actions in the observation.
+- flag_clause: provide clause_id and risks[] labels from risk_taxonomy.
+- clear_clause: provide clause_id (for clearly benign/safe clauses only).
+- classify_risk: provide clause_id, risks[], citation (e.g. "GDPR Art.5(1)(b)").
+- rewrite_clause: provide clause_id and rewritten_text fixing the identified risk.
+- generate_report: provide report{} with keys: executive_summary, flagged_clauses, severity_matrix, recommendations, deal_breakers.
+- detect_adversarial_clauses: provide clause_ids[] of obfuscated violation clauses.
+- submit_multi_party_sign_off: provide party_a_satisfied(bool), party_b_satisfied(bool), balance_justification(str).
+- Prioritise CRITICAL severity clauses first. Do NOT flag standard/benign clauses.
+- Benign clauses (no legal risk) must use clear_clause, never flag_clause.
 """).strip()
 
+# ── Agent ─────────────────────────────────────────────────────────────────────
 
-def build_prompt(obs: Dict[str, Any], history: List[str], task_id: str) -> str:
-    pending  = obs.get("context", {}).get("pending_clauses", {})
-    taxonomy = obs.get("context", {}).get("risk_taxonomy", {})
-    flagged  = obs.get("context", {}).get("flagged_so_far", [])
+def build_prompt(obs: Dict[str, Any], history: List[str]) -> str:
+    pending   = obs.get("context", {}).get("pending_clauses", {})
     available = obs.get("available_actions", [])
-
-    # Best action to use right now
-    priority = get_priority(task_id, obs.get('context',{}).get('completed_stages',[]), available)
-    best_action = next((a for a in priority if a in available), available[0] if available else "flag_clause")
-
-    # Clause guidance
-    clause_hints = []
-    for cid, clause in pending.items():
-        sev = clause.get("severity_hint", "?")
-        hint = "→ clear_clause (benign)" if sev == "NONE" else f"→ {best_action} (severity={sev})"
-        clause_hints.append(f"  {cid}: {hint} | {clause.get('text','')[:80]}...")
-
-    history_text = "\n".join(history[-4:]) if history else "None"
+    taxonomy  = list(obs.get("context", {}).get("risk_taxonomy", {}).keys())[:20]
+    hist_text = "\n".join(history[-4:]) if history else "None"
 
     return textwrap.dedent(f"""
-        TASK: {task_id} | Step {obs.get('step')}/{obs.get('max_steps')} | cascade={obs.get('cascade_multiplier')}
-        Available actions: {available}
-        BEST action to use now: {best_action}
-        Already reviewed: {obs.get('context',{}).get('reviewed_count',0)}/{obs.get('context',{}).get('total_clauses',0)}
-        Already flagged: {flagged}
+        TASK: {obs.get('task_id')}  STEP: {obs.get('step')}/{obs.get('max_steps')}
+        CASCADE: {obs.get('cascade_multiplier', 1.0)}x
+        AVAILABLE ACTIONS: {available}
+        REVIEWED: {obs.get('context',{}).get('reviewed_count',0)}/{obs.get('context',{}).get('total_clauses',0)}
+        FLAGGED SO FAR: {obs.get('context',{}).get('flagged_so_far',[])}
 
-        VALID clause_ids RIGHT NOW (use ONLY these):
-        {list(pending.keys())}
+        PENDING CLAUSES:
+        {json.dumps(pending, indent=2)}
 
-        PENDING CLAUSES with guidance:
-        {chr(10).join(clause_hints)}
+        RISK LABELS (use exact strings):
+        {taxonomy}
 
-        RISK TAXONOMY keys (use for risks[]):
-        {list(taxonomy.keys())[:15]}
+        HISTORY:
+        {hist_text}
 
-        RECENT HISTORY:
-        {history_text}
-
-        Respond with ONE JSON action using a clause_id from {list(pending.keys())}.
+        Respond with ONE JSON action. Nothing else.
     """).strip()
 
 
@@ -151,95 +168,53 @@ def call_llm(client: OpenAI, prompt: str) -> Dict[str, Any]:
             max_tokens=MAX_TOKENS,
         )
         raw = (resp.choices[0].message.content or "").strip()
-        # Strip Qwen3 thinking tags
-        import re as _re
-        raw = _re.sub(r"<think>.*?</think>", "", raw, flags=_re.DOTALL).strip()
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):
                 raw = raw[4:]
-        try:
-            return json.loads(raw.strip())
-        except Exception:
-            return {}
+        return json.loads(raw.strip())
     except Exception as exc:
         print(f"[WARN] LLM error: {exc}", flush=True)
         return {}
 
 
-def fallback_action(obs: Dict[str, Any], task_id: str) -> Dict[str, Any]:
+def fallback_action(obs: Dict[str, Any]) -> Dict[str, Any]:
     available = obs.get("available_actions", ["flag_clause"])
     pending   = obs.get("context", {}).get("pending_clauses", {})
-    priority  = get_priority(task_id, obs.get('context',{}).get('completed_stages',[]), available)
-    best      = next((a for a in priority if a in available), "flag_clause")
 
-    if best in ("flag_clause", "classify_risk", "clear_clause", "rewrite_clause") and pending:
-        cid    = next(iter(pending))
-        clause = pending[cid]
-        sev    = clause.get("severity_hint", "HIGH")
-        if sev == "NONE":
-            return {"action_type": "clear_clause", "clause_id": cid}
-        if best == "classify_risk":
-            taxonomy = obs.get("context", {}).get("risk_taxonomy", {})
-            risk_keys = list(taxonomy.keys())[:2] if taxonomy else ["unreasonable_duration"]
-            return {"action_type": "classify_risk", "clause_id": cid,
-                    "risks": risk_keys, "citation": "GDPR Art.5(1)(b)"}
-        if best == "rewrite_clause":
-            return {"action_type": "rewrite_clause", "clause_id": cid,
-                    "rewritten_text": f"This clause is amended to comply with applicable law, limiting obligations to a reasonable fixed term of 3 years with clear termination rights for both parties."}
-        return {"action_type": "flag_clause", "clause_id": cid, "risks": ["unreasonable_duration"]}
-
-    if best == "detect_adversarial_clauses":
+    if "flag_clause" in available and pending:
+        cid = next(iter(pending))
+        return {"action_type": "flag_clause", "clause_id": cid, "risks": []}
+    if "clear_clause" in available and pending:
+        cid = next(iter(pending))
+        return {"action_type": "clear_clause", "clause_id": cid}
+    if "generate_report" in available:
+        return {"action_type": "generate_report", "report": {
+            "executive_summary": "Legal audit complete.",
+            "flagged_clauses": obs.get("context", {}).get("flagged_so_far", []),
+            "severity_matrix": {},
+            "recommendations": ["Review flagged clauses with legal counsel."],
+            "deal_breakers": [],
+        }}
+    if "detect_adversarial_clauses" in available:
         return {"action_type": "detect_adversarial_clauses", "clause_ids": ["C019", "C020"]}
-    if best == "submit_multi_party_sign_off":
+    if "submit_multi_party_sign_off" in available:
         return {"action_type": "submit_multi_party_sign_off",
                 "party_a_satisfied": True, "party_b_satisfied": True,
-                "balance_justification": "Both parties benefit: GDPR compliance for client, data retention for counterparty within explicit limits and erasure rights preserved."}
-    if best == "generate_report":
-        flagged = obs.get("context", {}).get("flagged_so_far", [])
-        return {"action_type": "generate_report", "report": {
-            "executive_summary": "Legal audit identifies critical violations requiring immediate remediation.",
-            "flagged_clauses": flagged,
-            "severity_matrix": {c: "HIGH" for c in flagged},
-            "recommendations": ["Redline flagged clauses with legal counsel before signing."],
-            "deal_breakers": flagged[:1],
-        }}
+                "balance_justification": "Balanced redline addressing both parties core interests within legal requirements."}
     return {"action_type": available[0]}
 
 
-OPENENV_URL = os.getenv("OPENENV_URL", "https://hemant795-lex-forge.hf.space")
+# ── Episode runner ────────────────────────────────────────────────────────────
 
-def setup_env():
-    sys.path.insert(0, os.path.dirname(__file__))
-    from models import LexAction
-    # Use HTTP client if remote URL set, else fall back to local
-    try:
-        raise ImportError('Force local env')
-        class RemoteEnv:
-            def __init__(self):
-                self._client = SyncLexForgeEnvClient()
-            def reset(self, task_id):
-                obs = self._client.reset(task_id=task_id)
-                return obs
-            def step(self, action):
-                return self._client.step(action)
-        return RemoteEnv, LexAction
-    except Exception as e:
-        print(f"[WARN] HTTP client failed ({e}), falling back to local env", flush=True)
-        from server.environment import LexForgeEnvironment
-        return LexForgeEnvironment, LexAction
+def run_episode(client: OpenAI, task_id: str) -> Dict[str, Any]:
+    obs = env_reset(task_id)
 
-
-def run_episode(env_cls, action_cls, client: OpenAI, task_id: str) -> Dict[str, Any]:
-    env     = env_cls()
-    obs_raw = env.reset(task_id=task_id)
-    obs     = obs_raw.model_dump()
-
-    history:  List[str]  = []
-    rewards:  List[float] = []
+    history: List[str] = []
+    rewards: List[float] = []
     steps_taken = 0
     success = False
-    episode_start = time.time()
+    error   = None
 
     log_start(task=task_id, model=MODEL_NAME or "unknown")
 
@@ -247,93 +222,119 @@ def run_episode(env_cls, action_cls, client: OpenAI, task_id: str) -> Dict[str, 
         if obs.get("done"):
             break
 
-        step_start   = time.time()
-        prompt       = build_prompt(obs, history, task_id)
-        action_dict  = call_llm(client, prompt)
+        prompt      = build_prompt(obs, history)
+        action_dict = call_llm(client, prompt)
 
-        # Validate: action_type must be available and clause_id must be in pending
-        pending_ids = list(obs.get("context", {}).get("pending_clauses", {}).keys())
-        available   = obs.get("available_actions", [])
-        valid = (
-            action_dict.get("action_type") in available
-            and (
-                action_dict.get("action_type") not in ("flag_clause","clear_clause","classify_risk","rewrite_clause")
-                or action_dict.get("clause_id") in pending_ids
-            )
-        )
-        if not valid:
-            action_dict = fallback_action(obs, task_id)
+        # Validate action_type
+        available = obs.get("available_actions", [])
+        if not action_dict or action_dict.get("action_type") not in available:
+            action_dict = fallback_action(obs)
 
+        # Execute step
         try:
-            action = action_cls(**action_dict)
-        except Exception:
-            action = action_cls(**fallback_action(obs, task_id))
-
-        try:
-            result  = env.step(action)
-            reward  = result.reward if result.reward is not None else 0.0
-            done    = result.done
-            obs     = result.model_dump()
-            error   = None
+            obs    = env_step(action_dict)
+            reward = float(obs.get("reward") or 0.0)
+            done   = bool(obs.get("done", False))
+            error  = None
         except Exception as exc:
-            reward, done, error = 0.0, True, str(exc)[:80]
-            obs["done"] = True
+            reward = 0.0
+            done   = True
+            error  = str(exc)[:80]
+            obs    = {"done": True, "reward": 0.0, "available_actions": []}
 
-        elapsed = time.time() - step_start
         rewards.append(reward)
         steps_taken = step_n
 
-        log_step(step_n, action_dict.get("action_type","unknown"),
-                 reward, done, error, elapsed)
-        history.append(f"Step {step_n}: {action_dict.get('action_type')} "
-                       f"clause={action_dict.get('clause_id','?')} → reward={reward:.2f}")
+        log_step(
+            step=step_n,
+            action=action_dict.get("action_type", "unknown"),
+            reward=reward,
+            done=done,
+            error=error,
+        )
+
+        history.append(f"Step {step_n}: {action_dict.get('action_type')} → reward={reward:.2f}")
+
         if done:
             success = reward > 0.0
             break
 
-    total_time = time.time() - episode_start
-    print(f"[TIME] total={total_time:.1f}s mean_reward={sum(rewards)/max(len(rewards),1):.3f}", flush=True)
-    log_end(success, steps_taken, rewards, total_time)
-    return {"task_id": task_id, "steps": steps_taken, "rewards": rewards,
-            "mean_reward": sum(rewards)/max(len(rewards),1), "success": success,
-            "total_time": total_time}
+    log_end(success=success, steps=steps_taken, rewards=rewards)
 
+    return {
+        "task_id":     task_id,
+        "steps":       steps_taken,
+        "rewards":     rewards,
+        "mean_reward": sum(rewards) / max(len(rewards), 1),
+        "success":     success,
+    }
+
+
+# ── Verify server is reachable ────────────────────────────────────────────────
+
+def wait_for_server(max_wait: int = 60) -> bool:
+    print(f"Connecting to environment at {ENV_URL}...", flush=True)
+    for i in range(max_wait // 5):
+        try:
+            r = httpx.get(f"{ENV_URL}/health", timeout=5.0)
+            if r.status_code == 200:
+                print(f"✅ Environment server ready", flush=True)
+                return True
+        except Exception:
+            pass
+        time.sleep(5)
+    print(f"❌ Could not reach environment at {ENV_URL}", flush=True)
+    return False
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    overall_start = time.time()
     print("=" * 60, flush=True)
-    print(f"LexForge Baseline Inference", flush=True)
+    print("LexForge Baseline Inference", flush=True)
     print(f"Model    : {MODEL_NAME}", flush=True)
     print(f"Endpoint : {API_BASE_URL}", flush=True)
+    print(f"Env URL  : {ENV_URL}", flush=True)
     print("=" * 60, flush=True)
 
-    client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN or "placeholder")
-    LexForgeEnvironment, LexAction = setup_env()
+    # Check server reachable
+    if not wait_for_server():
+        sys.exit(1)
+
+    client = OpenAI(
+        base_url=API_BASE_URL,
+        api_key=HF_TOKEN or "placeholder",
+    )
 
     all_results = []
     for task_id in TASKS:
         print(f"\n{'─'*40}", flush=True)
-        result = run_episode(LexForgeEnvironment, LexAction, client, task_id)
-        all_results.append(result)
+        try:
+            result = run_episode(client, task_id)
+            all_results.append(result)
+        except Exception as exc:
+            print(f"[WARN] task {task_id} failed: {exc}", flush=True)
+            log_end(success=False, steps=0, rewards=[])
+            all_results.append({"task_id": task_id, "steps": 0,
+                                 "rewards": [], "mean_reward": 0.0, "success": False})
 
-    total_elapsed = time.time() - overall_start
+    # Summary
     print(f"\n{'='*60}", flush=True)
     print("BASELINE SCORES", flush=True)
     print(f"{'─'*60}", flush=True)
-    print(f"{'Task':<10} {'Steps':>5} {'MeanRwd':>8} {'Success':>8} {'Time':>8}", flush=True)
+    print(f"{'Task':<10} {'Steps':>6} {'Mean Reward':>12} {'Success':>8}", flush=True)
     print(f"{'─'*60}", flush=True)
     for r in all_results:
-        print(f"{r['task_id']:<10} {r['steps']:>5} {r['mean_reward']:>8.4f} "
-              f"{str(r['success']):>8} {r['total_time']:>7.1f}s", flush=True)
-    overall = sum(r["mean_reward"] for r in all_results) / len(all_results)
+        print(f"{r['task_id']:<10} {r['steps']:>6} {r['mean_reward']:>12.4f} {str(r['success']):>8}", flush=True)
+    overall = sum(r["mean_reward"] for r in all_results) / max(len(all_results), 1)
     print(f"{'─'*60}", flush=True)
-    print(f"{'OVERALL':<10} {'':>5} {overall:>8.4f} {'':>8} {total_elapsed:>7.1f}s", flush=True)
+    print(f"{'OVERALL':<10} {'':>6} {overall:>12.4f}", flush=True)
     print(f"{'='*60}", flush=True)
 
     with open("baseline_scores.json", "w") as f:
         json.dump({"model": MODEL_NAME, "endpoint": API_BASE_URL,
                    "results": all_results, "overall_mean": overall}, f, indent=2)
-    print(f"\nScores saved → baseline_scores.json", flush=True)
+    print(f"\nScores saved to baseline_scores.json", flush=True)
 
 
 if __name__ == "__main__":
