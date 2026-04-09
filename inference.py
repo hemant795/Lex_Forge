@@ -207,6 +207,7 @@ def run_episode(client, task_id):
 
     log_end(success=success, steps=steps_taken, rewards=rewards)
     mean = sum(rewards) / max(len(rewards), 1)
+    mean = max(0.01, min(0.99, mean))
     return {"task_id":task_id,"steps":steps_taken,"rewards":rewards,"mean_reward":mean,"success":success}
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -246,7 +247,7 @@ def main():
     print(f"{'─'*60}", flush=True)
     for r in results:
         print(f"{r['task_id']:<10} {r['steps']:>6} {r['mean_reward']:>12.4f} {str(r['success']):>8}", flush=True)
-    overall = sum(r["mean_reward"] for r in results) / max(len(results), 1)
+    overall = max(0.01, min(0.99, sum(r["mean_reward"] for r in results) / max(len(results), 1)))
     print(f"{'─'*60}", flush=True)
     print(f"{'OVERALL':<10} {'':>6} {overall:>12.4f}", flush=True)
     print(f"{'='*60}", flush=True)
