@@ -37,16 +37,16 @@ LexState       = _mod.LexState
 
 
 
-def _clip_reward(r: float) -> float:
-    """Rewards must be strictly between 0 and 1 (exclusive)."""
-    if r is None: return None
-    return max(0.01, min(0.99, float(r)))
+
 
 
 def _clip_reward(r):
     """Strictly between 0 and 1 — validator requirement."""
-    if r is None: return None
-    return round(max(0.01, min(0.99, float(r))), 4)
+    if r is None: return 0.5
+    val = float(r)
+    if val <= 0.0: return 0.01
+    if val >= 1.0: return 0.99
+    return round(max(0.01, min(0.99, val)), 4)
 
 # ─── Clause window size ───────────────────────────────────────────────────────
 WINDOW = 3   # How many pending clauses are visible at once
