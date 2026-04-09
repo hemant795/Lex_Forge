@@ -1,76 +1,76 @@
 {
-  "model": "Qwen/Qwen3-32B",
-  "endpoint": "https://router.huggingface.co/v1",
+  "model": "gemma4:e4b",
+  "endpoint": "http://localhost:11434/v1",
   "results": [
     {
       "task_id": "easy",
       "steps": 5,
       "rewards": [
+        0.001,
+        0.5,
         0.55,
         0.001,
-        0.55,
-        0.6,
-        0.75
+        0.1
       ],
-      "mean_reward": 0.4902,
+      "mean_reward": 0.23040000000000002,
       "success": true,
-      "total_time": 8.194154739379883
+      "total_time": 19.9434974193573
     },
     {
       "task_id": "medium",
       "steps": 8,
       "rewards": [
-        0.18,
-        0.16,
-        0.14,
-        0.12,
-        0.63,
-        0.8,
-        0.2007,
-        0.12
+        0.258,
+        0.999,
+        0.572,
+        0.624,
+        0.78,
+        0.224,
+        0.999,
+        0.999
       ],
-      "mean_reward": 0.29383750000000003,
+      "mean_reward": 0.681875,
       "success": true,
-      "total_time": 13.565709114074707
+      "total_time": 20.557822465896606
     },
     {
       "task_id": "hard",
       "steps": 10,
       "rewards": [
-        0.999,
+        0.715,
         0.999,
         0.33,
+        0.78,
+        0.845,
+        0.91,
         0.999,
         0.999,
-        0.999,
-        0.999,
-        0.999,
-        0.999,
-        0.999
+        0.975,
+        0.975
       ],
-      "mean_reward": 0.9320999999999999,
+      "mean_reward": 0.8526999999999999,
       "success": false,
-      "total_time": 10.277220010757446
+      "total_time": 51.959502935409546
     },
     {
       "task_id": "expert",
       "steps": 10,
       "rewards": [
+        0.001,
         0.999,
-        0.999,
-        0.999,
-        0.999,
-        0.999,
-        0.999,
-        0.999,
-        0.999,
+        0.715,
+        0.78,
+        0.845,
+        0.91,
+        0.975,
+        0.975,
         0.999,
         0.999
       ],
-      "mean_reward": 0.999,
+      "mean_reward": 0.8198000000000001,
       "success": false,
-      "total_time": 3.397005319595337
+      "total_time": 30.331407070159912
     }
   ],
-  "overall_mean": 0.678784375
+  "overall_mean": 0.64619375
 }

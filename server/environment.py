@@ -42,6 +42,12 @@ def _clip_reward(r: float) -> float:
     if r is None: return None
     return max(0.001, min(0.999, float(r)))
 
+
+def _clip_reward(r):
+    """Strictly between 0 and 1 — validator requirement."""
+    if r is None: return None
+    return round(max(0.001, min(0.999, float(r))), 4)
+
 # ─── Clause window size ───────────────────────────────────────────────────────
 WINDOW = 3   # How many pending clauses are visible at once
 
@@ -265,6 +271,7 @@ class LexForgeEnvironment(Environment):
         with _STORE_LOCK:
             _STORE['state']   = self._state
             _STORE['clauses'] = self._episode_clauses
+        final_reward = _clip_reward(final_reward)
         final_reward = _clip_reward(final_reward)
         return self._build_observation(
             reward=final_reward,
