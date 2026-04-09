@@ -28,10 +28,10 @@ def log_start(task, model):
 
 def log_step(step, action, reward, done, error):
     err = error if error else "null"
-    print(f"[STEP]  step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={err}", flush=True)
+    print(f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={err}", flush=True)
 
 def log_end(success, steps, rewards):
-    print(f"[END]   success={str(success).lower()} steps={steps} rewards={','.join(f'{r:.2f}' for r in rewards)}", flush=True)
+    print(f"[END] success={str(success).lower()} steps={steps} rewards={','.join(f'{r:.2f}' for r in rewards)}", flush=True)
 
 # ── Start local environment server ────────────────────────────────────────────
 def start_server():
