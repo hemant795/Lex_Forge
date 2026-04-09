@@ -36,6 +36,18 @@ LexAction      = _models.LexAction
 LexObservation = _models.LexObservation
 
 # ── Core app (handles /reset, /step, /state, /health) ────────────────────────
+
+def _api_clip(v):
+    """Force reward strictly into (0.01, 0.99) at API boundary."""
+    if v is None: return 0.5
+    try:
+        f = float(v)
+        if f <= 0.0: return 0.01
+        if f >= 1.0: return 0.99
+        return round(max(0.01, min(0.99, f)), 4)
+    except: return 0.5
+
+
 app = create_fastapi_app(LexForgeEnvironment, LexAction, LexObservation)
 
 # ── Extra endpoints ───────────────────────────────────────────────────────────
