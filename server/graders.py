@@ -33,7 +33,7 @@ def _clamp(value: float) -> float:
 def _f1(precision: float, recall: float) -> float:
     if precision + recall == 0:
         return 0.01
-    return 2 * precision * recall / (precision + recall)
+    return max(0.01, min(0.99, round(2 * precision * recall / (precision + recall), 4)))
 
 
 def _precision_recall(
@@ -86,8 +86,8 @@ def grade_identification(
     # False negatives: risky clauses missed (not flagged)
     fn = risky_in_task - flagged
 
-    precision = len(tp) / (len(tp) + len(fp)) if (tp or fp) else 0.0
-    recall    = len(tp) / len(risky_in_task)   if risky_in_task else 1.0
+    precision = len(tp) / (len(tp) + len(fp)) if (tp or fp) else 0.01
+    recall    = len(tp) / len(risky_in_task)   if risky_in_task else 0.99
     f1        = _f1(precision, recall)
 
     return {
@@ -96,7 +96,7 @@ def grade_identification(
         "f1":              round(f1, 4),
         "false_positives": len(fp),
         "false_negatives": len(fn),
-        "score":           round(f1, 4),
+        "score":           _clamp(f1),
     }
 
 
@@ -356,7 +356,7 @@ def grade_adversarial(
     false_alarms = detected - adversarial_in_task
     missed       = adversarial_in_task - detected
 
-    precision = len(tp) / len(detected) if detected else 0.0
+    precision = len(tp) / len(detected) if detected else 0.01
     recall    = len(tp) / len(adversarial_in_task)
     f1        = _f1(precision, recall)
 
