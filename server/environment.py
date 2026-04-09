@@ -126,7 +126,7 @@ class LexForgeEnvironment(Environment):
         with _STORE_LOCK:
             _STORE['state']   = self._state
             _STORE['clauses'] = self._episode_clauses
-        return self._build_observation(reward=None, done=False)
+        return self._build_observation(reward=0.5, done=False)
 
     # ── step() ────────────────────────────────────────────────────────────────
 
