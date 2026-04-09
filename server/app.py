@@ -50,6 +50,49 @@ def _api_clip(v):
 
 app = create_fastapi_app(LexForgeEnvironment, LexAction, LexObservation)
 
+# ── Reward clipping middleware ─────────────────────────────────────────────────
+import json as _json
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response as _Response
+
+class RewardClipMiddleware(BaseHTTPMiddleware):
+    """Intercept /reset and /step responses, clip reward to (0.01, 0.99)."""
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        if request.url.path in ("/reset", "/step"):
+            body = b""
+            async for chunk in response.body_iterator:
+                body += chunk
+            try:
+                data = _json.loads(body)
+                # Clip top-level reward
+                if "reward" in data:
+                    r = data["reward"]
+                    if r is None:
+                        data["reward"] = 0.5
+                    else:
+                        r = float(r)
+                        data["reward"] = 0.01 if r <= 0.0 else (0.99 if r >= 1.0 else round(max(0.01, min(0.99, r)), 4))
+                # Clip nested observation reward
+                if "observation" in data and isinstance(data["observation"], dict):
+                    obs = data["observation"]
+                    if "reward" in obs:
+                        r = obs["reward"]
+                        if r is None:
+                            obs["reward"] = 0.5
+                        else:
+                            r = float(r)
+                            obs["reward"] = 0.01 if r <= 0.0 else (0.99 if r >= 1.0 else round(max(0.01, min(0.99, r)), 4))
+                body = _json.dumps(data).encode()
+            except Exception:
+                pass
+            return _Response(content=body, status_code=response.status_code,
+                           headers=dict(response.headers), media_type="application/json")
+        return response
+
+app.add_middleware(RewardClipMiddleware)
+
+
 # ── Extra endpoints ───────────────────────────────────────────────────────────
 from fastapi import UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
