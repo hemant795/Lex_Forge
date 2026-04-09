@@ -32,7 +32,7 @@ def _clamp(value: float) -> float:
 
 def _f1(precision: float, recall: float) -> float:
     if precision + recall == 0:
-        return 0.0
+        return 0.01
     return 2 * precision * recall / (precision + recall)
 
 
@@ -40,7 +40,7 @@ def _precision_recall(
     predicted: Set[str], relevant: Set[str]
 ) -> Tuple[float, float]:
     if not predicted:
-        return 0.0, 0.0 if relevant else 1.0
+        return 0.01, 0.0 if relevant else 1.0
     tp = len(predicted & relevant)
     precision = tp / len(predicted)
     recall = tp / len(relevant) if relevant else 1.0
