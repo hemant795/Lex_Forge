@@ -26,8 +26,8 @@ from fixtures import (
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def _clamp(value: float) -> float:
-    """Clamp score to [0.0, 1.0]."""
-    return max(0.0, min(1.0, value))
+    """Clamp score to (0.01, 0.99) — validator requires strictly between 0 and 1."""
+    return round(max(0.01, min(0.99, float(value))), 4)
 
 
 def _f1(precision: float, recall: float) -> float:
@@ -40,7 +40,7 @@ def _precision_recall(
     predicted: Set[str], relevant: Set[str]
 ) -> Tuple[float, float]:
     if not predicted:
-        return 0.01, 0.0 if relevant else 1.0
+        return 0.01, 0.01 if relevant else 0.99
     tp = len(predicted & relevant)
     precision = tp / len(predicted)
     recall = tp / len(relevant) if relevant else 1.0
@@ -121,7 +121,7 @@ def grade_classification(
     dict with keys: label_score, citation_bonus, score
     """
     if clause_id not in CLAUSES:
-        return {"label_score": 0.0, "citation_bonus": 0.0, "score": 0.0}
+        return {"label_score": 0.01, "citation_bonus": 0.01, "score": 0.01}
 
     clause = CLAUSES[clause_id]
     correct_risks = set(clause["risks"])
@@ -129,7 +129,7 @@ def grade_classification(
 
     # Benign clause: agent should NOT flag any risks
     if clause["is_benign"]:
-        label_score = 1.0 if not stated else 0.0
+        label_score = 0.99 if not stated else 0.01
         return {
             "label_score":   round(label_score, 4),
             "citation_bonus": 0.0,
@@ -138,7 +138,7 @@ def grade_classification(
 
     # Risky clause: measure overlap
     if not correct_risks:
-        label_score = 1.0
+        label_score = 0.99
     elif not stated:
         label_score = 0.0
     else:
@@ -198,16 +198,16 @@ def grade_rewrite(
     dict with keys: structural_change, keyword_score, danger_penalty, score
     """
     if clause_id not in CLAUSES:
-        return {"structural_change": 0.0, "keyword_score": 0.0,
-                "danger_penalty": 0.0, "score": 0.0}
+        return {"structural_change": 0.01, "keyword_score": 0.01,
+                "danger_penalty": 0.01, "score": 0.01}
 
     clause        = CLAUSES[clause_id]
     original_text = clause["text"].lower().strip()
     rewrite_lower = (rewritten_text or "").lower().strip()
 
     if not rewrite_lower:
-        return {"structural_change": 0.0, "keyword_score": 0.0,
-                "danger_penalty": 0.0, "score": 0.0}
+        return {"structural_change": 0.01, "keyword_score": 0.01,
+                "danger_penalty": 0.01, "score": 0.01}
 
     # Structural change: rewrite is meaningfully different from original
     structural_change = 0.30 if rewrite_lower != original_text else 0.0
@@ -283,7 +283,7 @@ def grade_report(
     dict with keys: section_score, clause_coverage, score
     """
     if not report:
-        return {"section_score": 0.0, "clause_coverage": 0.0, "score": 0.0}
+        return {"section_score": 0.01, "clause_coverage": 0.01, "score": 0.01}
 
     # Section coverage
     sections_present = 0
@@ -306,7 +306,7 @@ def grade_report(
     if risky_in_task:
         clause_coverage = len(report_flagged & risky_in_task) / len(risky_in_task)
     else:
-        clause_coverage = 1.0
+        clause_coverage = 0.99
 
     score = _clamp((section_score * 0.5) + (clause_coverage * 0.5))
 
@@ -349,8 +349,8 @@ def grade_adversarial(
 
     if not adversarial_in_task:
         # No adversarial clauses in this task — detection not applicable
-        return {"precision": 1.0, "recall": 1.0, "f1": 1.0,
-                "false_alarms": 0, "missed": 0, "score": 1.0}
+        return {"precision": 0.99, "recall": 0.99, "f1": 0.99,
+                "false_alarms": 0, "missed": 0, "score": 0.99}
 
     tp           = detected & adversarial_in_task
     false_alarms = detected - adversarial_in_task
@@ -397,8 +397,8 @@ def grade_signoff(
     -------
     dict with keys: party_a, party_b, justification, score
     """
-    a_score = 0.40 if party_a_satisfied is True else 0.0
-    b_score = 0.40 if party_b_satisfied is True else 0.0
+    a_score = 0.40 if party_a_satisfied is True else 0.01
+    b_score = 0.40 if party_b_satisfied is True else 0.01
 
     justification = balance_justification or ""
     j_score = 0.20 if len(justification.strip()) >= 50 else 0.0
