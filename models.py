@@ -11,7 +11,7 @@ LexState     → extends openenv.core.State           (episode_id + step_count b
 
 from __future__ import annotations
 from typing import Any, Dict, List, Optional
-from pydantic import Field
+from pydantic import Field, model_validator
 from openenv.core import Action, Observation, State
 
 
@@ -166,6 +166,33 @@ class LexObservation(Observation):
         default="",
         description="Human-readable explanation for rewards"
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def clip_floats(cls, data):
+        if isinstance(data, dict):
+            def clip(obj):
+                if isinstance(obj, dict): return {k: clip(v) for k,v in obj.items()}
+                if isinstance(obj, list): return [clip(v) for v in obj]
+                if isinstance(obj, float):
+                    if obj <= 0.0: return 0.01
+                    if obj >= 1.0: return 0.99
+                return obj
+            return clip(data)
+        return data
+
+    @classmethod
+    def _clip_all_floats(cls, data):
+        """Clip all float values to (0.01, 0.99) to satisfy validator."""
+        if isinstance(data, dict):
+            return {k: cls._clip_all_floats(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [cls._clip_all_floats(v) for v in data]
+        elif isinstance(data, float):
+            if data <= 0.0: return 0.01
+            if data >= 1.0: return 0.99
+            return data
+        return data
 
     model_config = {
         "extra": "forbid",
