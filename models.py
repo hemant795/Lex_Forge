@@ -192,6 +192,21 @@ class LexObservation(Observation):
             return data
         return data
 
+
+    @model_validator(mode="before")
+    @classmethod
+    def _clip_all_floats(cls, data):
+        if not isinstance(data, dict): return data
+        def clip(obj):
+            if isinstance(obj, float):
+                if obj <= 0.0: return 0.01
+                if obj >= 1.0: return 0.99
+                return obj
+            if isinstance(obj, dict): return {k: clip(v) for k,v in obj.items()}
+            if isinstance(obj, list): return [clip(v) for v in obj]
+            return obj
+        return clip(data)
+
     model_config = {
         "extra": "forbid",
         "validate_assignment": True,
@@ -225,6 +240,21 @@ class LexState(State):
     audit_report: Dict[str, Any] = Field(default_factory=dict)
     adversarial_detected: List[str] = Field(default_factory=list)
     multi_party_scores: Dict[str, Any] = Field(default_factory=dict)
+
+
+    @model_validator(mode="before")
+    @classmethod
+    def _clip_all_floats(cls, data):
+        if not isinstance(data, dict): return data
+        def clip(obj):
+            if isinstance(obj, float):
+                if obj <= 0.0: return 0.01
+                if obj >= 1.0: return 0.99
+                return obj
+            if isinstance(obj, dict): return {k: clip(v) for k,v in obj.items()}
+            if isinstance(obj, list): return [clip(v) for v in obj]
+            return obj
+        return clip(data)
 
     model_config = {
         "extra": "allow",
