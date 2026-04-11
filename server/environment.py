@@ -343,7 +343,7 @@ class LexForgeEnvironment(Environment):
             task_id=st.task_id,
             step=st.step_count,
             max_steps=TASK_MAX_STEPS[st.task_id],
-            cascade_multiplier=st.cascade_multiplier,
+            cascade_multiplier=round(max(0.01, min(0.99, (st.cascade_multiplier - 0.5) / 1.0)), 4),
             available_actions=TASK_AVAILABLE_ACTIONS[st.task_id],
             context=context,
             reward_breakdown=reward_breakdown or {},
