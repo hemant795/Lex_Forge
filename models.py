@@ -140,8 +140,6 @@ class LexObservation(Observation):
     )
     cascade_multiplier: float = Field(
         default=0.99,
-        ge=0.5,
-        le=1.5,
         description="Current cascade reward multiplier [0.5, 1.5]. Starts at 1.0."
     )
     available_actions: List[str] = Field(
