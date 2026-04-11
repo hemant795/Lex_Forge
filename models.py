@@ -220,7 +220,7 @@ class LexState(State):
     false_positives: int = Field(default=0)
     false_negatives: int = Field(default=0)
     completed_stages: List[str] = Field(default_factory=list)
-    cascade_multiplier: float = Field(default=0.99)
+    cascade_multiplier: float = Field(default=0.49)
     episode_rewards: List[float] = Field(default_factory=list)
     audit_report: Dict[str, Any] = Field(default_factory=dict)
     adversarial_detected: List[str] = Field(default_factory=list)

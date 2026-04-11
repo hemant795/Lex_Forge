@@ -255,7 +255,8 @@ class LexForgeEnvironment(Environment):
                 st.completed_stages.append("sign_off")
 
         # ── Update cascade ────────────────────────────────────────────────────
-        st.cascade_multiplier = update_cascade(st.cascade_multiplier, correct_action)
+        _new_cascade = update_cascade(st.cascade_multiplier, correct_action)
+        st.cascade_multiplier = round(max(0.01, min(0.99, (_new_cascade - 0.5) / 1.0)), 4)
         final_reward = apply_cascade(max(0.01, reward), st.cascade_multiplier)
         st.episode_rewards.append(final_reward)
 
