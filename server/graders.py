@@ -397,11 +397,11 @@ def grade_signoff(
     -------
     dict with keys: party_a, party_b, justification, score
     """
-    a_score = 0.40 if party_a_satisfied is True else 0.01
-    b_score = 0.40 if party_b_satisfied is True else 0.01
+    a_score = 0.39 if party_a_satisfied is True else 0.01
+    b_score = 0.39 if party_b_satisfied is True else 0.01
 
     justification = balance_justification or ""
-    j_score = 0.20 if len(justification.strip()) >= 50 else 0.0
+    j_score = 0.20 if len(justification.strip()) >= 50 else 0.01
 
     score = _clamp(a_score + b_score + j_score)
 
