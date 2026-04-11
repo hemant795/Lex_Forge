@@ -139,7 +139,7 @@ class LexObservation(Observation):
         description="Maximum steps allowed for this task"
     )
     cascade_multiplier: float = Field(
-        default=1.0,
+        default=0.99,
         ge=0.5,
         le=1.5,
         description="Current cascade reward multiplier [0.5, 1.5]. Starts at 1.0."
@@ -157,7 +157,7 @@ class LexObservation(Observation):
         description="Per-grader score breakdown for interpretability"
     )
     partial_progress: float = Field(
-        default=0.0,
+        default=0.01,
         ge=0.0,
         le=1.0,
         description="Fraction of objectives completed [0.0, 1.0]"
@@ -195,7 +195,7 @@ class LexState(State):
     false_positives: int = Field(default=0)
     false_negatives: int = Field(default=0)
     completed_stages: List[str] = Field(default_factory=list)
-    cascade_multiplier: float = Field(default=1.0)
+    cascade_multiplier: float = Field(default=0.99)
     episode_rewards: List[float] = Field(default_factory=list)
     audit_report: Dict[str, Any] = Field(default_factory=dict)
     adversarial_detected: List[str] = Field(default_factory=list)
