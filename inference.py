@@ -77,7 +77,7 @@ def env_step(action_dict):
     r.raise_for_status()
     data = r.json()
     obs = data.get("observation", data)
-    obs["reward"] = data.get("reward", obs.get("reward", 0.0))
+    obs["reward"] = data.get("reward", obs.get("reward", 0.01))
     obs["done"]   = data.get("done",   obs.get("done", True))
     return obs
 
@@ -185,7 +185,7 @@ def run_episode(client, task_id):
 
         try:
             obs    = env_step(action_dict)
-            reward = float(obs.get("reward") or 0.0)
+            reward = max(0.01, min(0.99, float(obs.get("reward") or 0.01)))
             done   = bool(obs.get("done", False))
             error  = None
         except Exception as exc:
@@ -194,6 +194,7 @@ def run_episode(client, task_id):
 
         # Clip strictly within (0, 1) — validator requirement
         reward = max(0.01, min(0.99, reward))
+        reward = max(0.01, min(0.99, float(reward)))
         rewards.append(reward)
         steps_taken = step_n
 
