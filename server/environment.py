@@ -169,7 +169,7 @@ class LexForgeEnvironment(Environment):
                     st.flagged_clauses.append(cid)
                     reward = 0.5
                     correct_action = True
-                reward_breakdown["flag_accuracy"] = max(0.0, reward)
+                reward_breakdown["flag_accuracy"] = max(0.01, reward)
 
         # ── clear_clause ──────────────────────────────────────────────────────
         elif atype == "clear_clause":
@@ -185,7 +185,7 @@ class LexForgeEnvironment(Environment):
                     st.false_negatives += 1
                     reward = -0.2
                     correct_action = False
-                reward_breakdown["clear_accuracy"] = max(0.0, reward)
+                reward_breakdown["clear_accuracy"] = max(0.01, reward)
 
         # ── classify_risk ─────────────────────────────────────────────────────
         elif atype == "classify_risk":
@@ -198,7 +198,7 @@ class LexForgeEnvironment(Environment):
                 )
                 reward = result["score"]
                 correct_action = reward > 0.5
-                reward_breakdown["classification_score"] = reward
+                reward_breakdown["classification_score"] = max(0.01, min(0.99, reward))
 
         # ── rewrite_clause ────────────────────────────────────────────────────
         elif atype == "rewrite_clause":
@@ -207,7 +207,7 @@ class LexForgeEnvironment(Environment):
                 result = grade_rewrite(cid, action.rewritten_text)
                 reward = result["score"]
                 correct_action = reward > 0.5
-                reward_breakdown["rewrite_quality"] = reward
+                reward_breakdown["rewrite_quality"] = max(0.01, min(0.99, reward))
                 if reward > 0:
                     st.rewritten_clauses.append({
                         "clause_id": cid,
@@ -225,7 +225,7 @@ class LexForgeEnvironment(Environment):
                 )
                 reward = result["score"]
                 correct_action = reward > 0.5
-                reward_breakdown["report_completeness"] = reward
+                reward_breakdown["report_completeness"] = max(0.01, min(0.99, reward))
                 st.audit_report = action.report
                 if "generate_report" not in st.completed_stages:
                     st.completed_stages.append("generate_report")
@@ -235,7 +235,7 @@ class LexForgeEnvironment(Environment):
             result = grade_adversarial(action.clause_ids or [], clause_set)
             reward = result["score"]
             correct_action = reward > 0.5
-            reward_breakdown["adversarial_f1"] = reward
+            reward_breakdown["adversarial_f1"] = max(0.01, min(0.99, reward))
             st.adversarial_detected = action.clause_ids or []
             if "detect_adversarial" not in st.completed_stages:
                 st.completed_stages.append("detect_adversarial")
@@ -249,8 +249,8 @@ class LexForgeEnvironment(Environment):
             )
             reward = result["score"]
             correct_action = reward >= 0.8
-            reward_breakdown["balance_score"] = reward
-            st.multi_party_scores = result
+            reward_breakdown["balance_score"] = max(0.01, min(0.99, reward))
+            st.multi_party_scores = {k: max(0.01, min(0.99, float(v))) if isinstance(v, (int, float)) else v for k, v in result.items()}
             if "sign_off" not in st.completed_stages:
                 st.completed_stages.append("sign_off")
 
@@ -347,7 +347,7 @@ class LexForgeEnvironment(Environment):
             available_actions=TASK_AVAILABLE_ACTIONS[st.task_id],
             context=context,
             reward_breakdown=reward_breakdown or {},
-            partial_progress=round(partial_progress, 4),
+            partial_progress=round(max(0.01, min(0.99, partial_progress)) if partial_progress is not None else 0.01, 4),
             reward_explanation=reward_explanation,
             done=done,
             reward=reward,
