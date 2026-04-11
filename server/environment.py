@@ -256,13 +256,13 @@ class LexForgeEnvironment(Environment):
 
         # ── Update cascade ────────────────────────────────────────────────────
         st.cascade_multiplier = update_cascade(st.cascade_multiplier, correct_action)
-        final_reward = apply_cascade(max(0.0, reward), st.cascade_multiplier)
+        final_reward = apply_cascade(max(0.01, reward), st.cascade_multiplier)
         st.episode_rewards.append(final_reward)
 
         # ── Completion bonus ──────────────────────────────────────────────────
         all_reviewed = set(clause_set) <= set(st.reviewed_clauses)
         if all_reviewed and "complete" not in st.completed_stages:
-            final_reward = min(1.0, final_reward + 0.1)
+            final_reward = min(0.99, final_reward + 0.1)
             st.completed_stages.append("complete")
 
         # ── Done condition ────────────────────────────────────────────────────
@@ -317,7 +317,7 @@ class LexForgeEnvironment(Environment):
 
         partial_progress = (
             len(st.reviewed_clauses) / len(clause_set)
-            if clause_set else 1.0
+            if clause_set else 0.99
         )
 
         context = {
