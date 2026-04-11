@@ -416,15 +416,14 @@ def grade_signoff(
 # ─── Cascade Mechanic ─────────────────────────────────────────────────────────
 
 def update_cascade(current: float, correct: bool) -> float:
-    """
-    Update cascade multiplier after an action.
-
-    correct action → +0.1 (max 1.5)
-    wrong action   → -0.1 (min 0.5)
-    """
+    """Update cascade multiplier — result must never be exactly 0.0 or 1.0."""
     delta = 0.1 if correct else -0.1
-    return round(max(0.5, min(1.5, current + delta)), 2)
-
+    result = round(current + delta, 4)
+    # Clamp to (0.5, 1.5) but never exactly hit 1.0
+    result = max(0.5, min(1.5, result))
+    if result == 1.0:
+        result = 1.01 if correct else 0.99
+    return result
 
 def apply_cascade(base_score: float, cascade: float) -> float:
     """Apply cascade multiplier to base score, clamped to [0.0, 1.0]."""
